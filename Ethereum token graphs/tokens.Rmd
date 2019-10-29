@@ -1,0 +1,352 @@
+---
+title: "R Notebook"
+output: html_notebook
+Author: "Bharat Simha Reddy, Sahith Reddy"
+---
+
+
+"Question-1"
+
+#Question-1 : Find the distribution of how many times a pair users (i.e., address1 and address2) 1 - buys, 2 - sells a token with each other. Which distribution type fits these distributions best? Estimate population distribution parameters.
+
+```{r}
+library(dplyr)
+library(fitdistrplus)
+library(UsingR)
+```
+
+##Preprocessing
+```{r}
+
+mcap <- read.table('networkmcapTX.txt', sep=" ")
+statusnetwork <- read.table('networkstatusnetworkTX.txt', sep=" ")
+bnb <- read.table('networkbnbTX.txt', sep=" ")
+
+```
+
+```{r}
+names(mcap) <- c('SellerInfo', 'BuyerInfo', 'TimeStamp', 'TokenPrice')
+names(statusnetwork) <- c('SellerInfo', 'BuyerInfo', 'TimeStamp', 'TokenPrice')
+names(bnb) <- c('SellerInfo', 'BuyerInfo', 'TimeStamp', 'TokenPrice')
+```
+
+```{r}
+supply_mcap <- 100000000
+supply_statusnetwork <- 6804870174.8781
+supply_bnb <- 183345602.24249
+decimals_mcap <- 10^8
+decimals_statusnetwork <- 10^18
+decimals_bnb <- 10^18
+```
+
+```{r}
+mcapFiltered <- mcap %>% filter(TokenPrice < decimals_mcap* supply_mcap)
+statusnetworkFiltered <- statusnetwork %>% filter(TokenPrice < decimals_statusnetwork * supply_statusnetwork)
+bnbFiltered <- bnb %>% filter(TokenPrice < decimals_bnb* supply_bnb)
+```
+
+##Checking Outliers
+```{r}
+nrow(mcap)
+nrow(mcapFiltered)
+mcap %>% filter(TokenPrice >= decimals_mcap * supply_mcap) %>% nrow()
+
+nrow(statusnetwork)
+nrow(statusnetworkFiltered)
+statusnetwork %>% filter(TokenPrice >= decimals_statusnetwork * supply_statusnetwork) %>% nrow()
+
+nrow(bnb)
+nrow(bnbFiltered)
+bnb %>% filter(TokenPrice >= decimals_bnb * supply_bnb) %>% nrow()
+```
+##End Preprocessing.
+
+###buying-selling distribution
+###the fisrt column has the person selling token
+###the second column has the person buying token. 
+###We get the distribution
+```{r}
+mcap_users <- mcapFiltered[,1:2]
+mcap_sorted_users <- mcap_users %>% filter(SellerInfo <= BuyerInfo)
+mcap_users_to_swap <- mcap_users %>% filter(SellerInfo > BuyerInfo)
+mcap_users_to_swap[ , c(1,2)] <- mcap_users_to_swap[ , c(2,1)]
+mcap_sorted_users <- merge(mcap_sorted_users, mcap_users_to_swap)
+mcap.distribution <- mcap_sorted_users %>% group_by(.dots = c("SellerInfo", "BuyerInfo")) %>% count() %>% ungroup
+nrow(mcap.distribution)
+```
+
+```{r}
+statusnetwork_users <- statusnetworkFiltered[,1:2]
+statusnetwork_sorted_users <- statusnetwork_users %>% filter(SellerInfo <= BuyerInfo)
+statusnetwork_users_to_swap <- statusnetwork_users %>% filter(SellerInfo > BuyerInfo)
+statusnetwork_users_to_swap[ , c(1,2)] <- statusnetwork_users_to_swap[ , c(2,1)]
+statusnetwork_sorted_users <- merge(statusnetwork_sorted_users, statusnetwork_users_to_swap)
+statusnetwork.distribution <-statusnetwork_sorted_users %>% group_by(.dots = c("SellerInfo", "BuyerInfo")) %>% count() %>% ungroup
+nrow(statusnetwork.distribution)
+```
+
+```{r}
+bnb_users <- bnbFiltered[,1:2]
+bnb_sorted_users <- bnb_users %>% filter(SellerInfo <= BuyerInfo)
+bnb_users_to_swap <- bnb_users %>% filter(SellerInfo > BuyerInfo)
+bnb_users_to_swap[ , c(1,2)] <- bnb_users_to_swap[ , c(2,1)]
+bnb_sorted_users <- merge(bnb_sorted_users, bnb_users_to_swap)
+bnb.distribution <- bnb_sorted_users %>% group_by(.dots = c("SellerInfo", "BuyerInfo")) %>% count() %>% ungroup
+nrow(bnb.distribution)
+```
+
+##Total No of Buyer-Seller pairs in each tokenfile.
+```{r}
+nrow(mcap.distribution)
+nrow(statusnetwork.distribution)
+nrow(bnb.distribution)
+```
+```{r}
+mcap.distribution<- mcap.distribution %>% filter(n > 3 & n < 300)
+statusnetwork.distribution<-statusnetwork.distribution %>% filter(n > 3 & n < 300)
+bnb.distribution<- bnb.distribution %>% filter(n > 3 & n < 300)
+```
+
+###finding best distribution
+###fitdistrplus is a library we have used that to plot the graph for all distributions
+###(exp,gamma,geometric,log,lnorm,nbinom,norm,pois,unif,weibull ) and
+###finding the best distribution and estimates best parameters.
+```{r}
+fit.gamma.mcap <- fitdist(mcap.distribution$n, 'gamma',lower = c(0, 0), start = list(scale = 1, shape = 1))
+fit.log.mcap <- fitdist(mcap.distribution$n, 'logis') 
+fit.lnorm.mcap <- fitdist(mcap.distribution$n, 'lnorm') 
+fit.nbinom.mcap <- fitdist(mcap.distribution$n, 'nbinom') 
+fit.norm.mcap <- fitdist(mcap.distribution$n, 'norm') 
+fit.unif.mcap <- fitdist(mcap.distribution$n, 'unif') 
+fit.weibull.mcap <- fitdist(mcap.distribution$n, 'weibull')
+```
+
+```{r}
+gofstat(list(fit.weibull.mcap, fit.gamma.mcap, fit.lnorm.mcap,
+              fit.log.mcap, fit.nbinom.mcap, fit.norm.mcap, fit.unif.mcap))
+```
+
+```{r}
+hist(mcap.distribution$n, pch=20, breaks=25, prob=TRUE, main="")
+
+curve(dnorm(x, fit.gamma.mcap$estimate[1], fit.gamma.mcap$estimate[2]), col="red", lwd=2, add=T)
+curve(dnorm(x, fit.log.mcap$estimate[1], fit.log.mcap$estimate[2]), col="orange", lwd=2, add=T)
+curve(dnorm(x, fit.lnorm.mcap$estimate[1], fit.lnorm.mcap$estimate[2]), col="black", lwd=2, add=T)
+curve(dnorm(x, fit.nbinom.mcap$estimate[1], fit.nbinom.mcap$estimate[2]), col="blue", lwd=2, add=T)
+curve(dnorm(x, fit.norm.mcap$estimate[1], fit.norm.mcap$estimate[2]), col="pink", lwd=2, add=T)
+curve(dnorm(x, fit.unif.mcap$estimate[1], fit.unif.mcap$estimate[2]), col="green", lwd=2, add=T)
+curve(dnorm(x, fit.weibull.mcap$estimate[1], fit.weibull.mcap$estimate[2]), col="brown", lwd=2, add=T)
+```
+
+```{r}
+fit.gamma.statusnetwork <- fitdist(statusnetwork.distribution$n, 'gamma',lower = c(0, 0), start = list(scale = 1, shape = 1))
+fit.log.statusnetwork <- fitdist(statusnetwork.distribution$n, 'logis') 
+fit.lnorm.statusnetwork <- fitdist(statusnetwork.distribution$n, 'lnorm') 
+fit.nbinom.statusnetwork <- fitdist(statusnetwork.distribution$n, 'nbinom') 
+fit.norm.statusnetwork <- fitdist(statusnetwork.distribution$n, 'norm') 
+fit.unif.statusnetwork <- fitdist(statusnetwork.distribution$n, 'unif') 
+fit.weibull.statusnetwork <- fitdist(statusnetwork.distribution$n, 'weibull')
+```
+
+```{r}
+gofstat(list(fit.weibull.statusnetwork, fit.gamma.statusnetwork, fit.lnorm.statusnetwork,
+              fit.log.statusnetwork, fit.nbinom.statusnetwork, fit.norm.statusnetwork,  fit.unif.statusnetwork ))
+```
+```{r}
+hist(mcap.distribution$n, pch=20, breaks=25, prob=TRUE, main="")
+
+curve(dnorm(x, fit.gamma.statusnetwork$estimate[1], fit.gamma.statusnetwork$estimate[2]), col="red", lwd=2, add=T)
+curve(dnorm(x, fit.log.statusnetwork$estimate[1], fit.log.statusnetwork$estimate[2]), col="orange", lwd=2, add=T)
+curve(dnorm(x, fit.lnorm.statusnetwork$estimate[1], fit.lnorm.statusnetwork$estimate[2]), col="black", lwd=2, add=T)
+curve(dnorm(x, fit.nbinom.statusnetwork$estimate[1], fit.nbinom.statusnetwork$estimate[2]), col="blue", lwd=2, add=T)
+curve(dnorm(x, fit.norm.statusnetwork$estimate[1], fit.norm.statusnetwork$estimate[2]), col="pink", lwd=2, add=T)
+curve(dnorm(x, fit.unif.statusnetwork$estimate[1], fit.unif.statusnetwork$estimate[2]), col="green", lwd=2, add=T)
+curve(dnorm(x, fit.weibull.statusnetwork$estimate[1], fit.weibull.statusnetwork$estimate[2]), col="brown", lwd=2, add=T)
+```
+
+```{r}
+fit.gamma.bnb <- fitdist(bnb.distribution$n, 'gamma',lower = c(0, 0), start = list(scale = 1, shape = 1))
+fit.log.bnb <- fitdist(bnb.distribution$n, 'logis') 
+fit.lnorm.bnb <- fitdist(bnb.distribution$n, 'lnorm') 
+fit.nbinom.bnb <- fitdist(bnb.distribution$n, 'nbinom') 
+fit.norm.bnb <- fitdist(bnb.distribution$n, 'norm') 
+fit.unif.bnb <- fitdist(bnb.distribution$n, 'unif') 
+fit.weibull.bnb <- fitdist(bnb.distribution$n, 'weibull')
+```
+
+```{r}
+gofstat(list(fit.weibull.bnb, fit.gamma.bnb, fit.lnorm.bnb,
+              fit.log.bnb, fit.nbinom.bnb, fit.norm.bnb, fit.unif.bnb))
+```
+
+```{r}
+hist(bnb.distribution$n, pch=20, breaks=25, prob=TRUE, main="")
+
+curve(dnorm(x, fit.gamma.bnb$estimate[1], fit.gamma.bnb$estimate[2]), col="red", lwd=2, add=T)
+curve(dnorm(x, fit.log.bnb$estimate[1], fit.log.bnb$estimate[2]), col="orange", lwd=2, add=T)
+curve(dnorm(x, fit.lnorm.bnb$estimate[1], fit.lnorm.bnb$estimate[2]), col="black", lwd=2, add=T)
+curve(dnorm(x, fit.nbinom.bnb$estimate[1], fit.nbinom.bnb$estimate[2]), col="blue", lwd=2, add=T)
+curve(dnorm(x, fit.norm.bnb$estimate[1], fit.norm.bnb$estimate[2]), col="pink", lwd=2, add=T)
+curve(dnorm(x, fit.unif.bnb$estimate[1], fit.unif.bnb$estimate[2]), col="green", lwd=2, add=T)
+curve(dnorm(x, fit.weibull.bnb$estimate[1], fit.weibull.bnb$estimate[2]), col="brown", lwd=2, add=T)
+```
+
+##From the above statistics and graphs
+##LNorm is the best distribution
+##Estimated parameters are summarized below
+
+```{r}
+summary(fit.lnorm.mcap)
+summary(fit.lnorm.statusnetwork)
+summary(fit.lnorm.bnb)
+```
+
+
+#Question-2
+
+#This question is similar to the first question. You will find the most active buyers and sellers in each of your three token network, and track them in other tokens. Develop a regression model where “buys” of the top K buyers (by number of buys or amount of buys) are regressors, and token price is the outcome. Determine a K value to have the best regression results. This means that you will develop three regression models for three tokens, and K can be different for each model.
+
+##reading tokenprices file
+
+```{r}
+mcapPrice = read.table(file="mcap", header=T,sep="\t")
+statusnetworkPrice = read.table(file="statusnetwork", header=T,sep="\t")
+bnbPrice = read.table(file="bnb.csv", header=T,sep=",")
+```
+
+```{R}
+colNames <- c("DATE","Open","High","Low", "Close" ,"Volume","MarketCap")
+colnames(mcapPrice) <- colNames
+colnames(statusnetworkPrice) <- colNames
+colnames(bnbPrice) <- colNames
+```
+
+
+##reading tokenGraph file
+```{r}
+mcap <-read.table('networkmcapTX.txt', sep=" ")
+statusnetwork <- read.table('networkstatusnetworkTX.txt', sep=" ")
+bnb <- read.table('networkbnbTX.txt', sep=" ")
+```
+
+##naming columns for tokenGraph file
+```{r}
+names(mcap) <- c('SellerInfo', 'BuyerInfo', 'TimeStamp', 'TokenPrice')
+names(statusnetwork) <- c('SellerInfo', 'BuyerInfo', 'TimeStamp', 'TokenPrice')
+names(bnb) <- c('SellerInfo', 'BuyerInfo', 'TimeStamp', 'TokenPrice')
+```
+
+```{r}
+mcap$DATE <- format(as.Date(as.POSIXct(as.numeric(as.character(mcap$TimeStamp)),origin="1970/01/01",tz="GMT"), tz="GMT"), "%m/%d/%Y")
+statusnetwork$DATE <- format(as.Date(as.POSIXct(as.numeric(as.character(statusnetwork$TimeStamp)),origin="1970/01/01",tz="GMT"), tz="GMT"), "%m/%d/%Y")
+bnb$DATE <- format(as.Date(as.POSIXct(as.numeric(as.character(bnb$TimeStamp)),origin="1970/01/01",tz="GMT"), tz="GMT"), "%m/%d/%Y")
+```
+
+
+```{r}
+supply_mcap <- 100000000
+supply_statusnetwork <- 6804870174.8781
+supply_bnb <- 183345602.24249
+decimals_mcap <- 10^8
+decimals_statusnetwork <- 10^18
+decimals_bnb <- 10^18
+```
+
+
+```{r}
+mcapFiltered <- mcap %>% filter(TokenPrice < decimals_mcap* supply_mcap)
+statusnetworkFiltered <- statusnetwork %>% filter(TokenPrice < decimals_statusnetwork * supply_statusnetwork)
+bnbFiltered <- bnb %>% filter(TokenPrice < decimals_bnb* supply_bnb)
+```
+
+```{r}
+mcap.distribution <- mcapFiltered %>% group_by(BuyerInfo) %>% summarise(n = n()) %>% ungroup
+statusnetwork.distribution <- statusnetworkFiltered %>% group_by(BuyerInfo) %>% summarise(n = n()) %>% ungroup
+bnb.distribution <- bnbFiltered %>% group_by(BuyerInfo) %>% summarise(n = n()) %>% ungroup
+```
+
+```{r}
+mcaptopbuyerssorted <- mcap.distribution[order(mcap.distribution$n, decreasing = TRUE),] 
+statusnetworktopbuyerssorted <- statusnetwork.distribution[order(statusnetwork.distribution$n, decreasing = TRUE),]
+bnbtopbuyerssorted <- bnb.distribution[order(bnb.distribution$n, decreasing = TRUE),] 
+```
+
+```{r}
+mcaptop100buys <- head(mcaptopbuyerssorted,100)
+statusnetworktop100buys <- head(statusnetworktopbuyerssorted,100)
+bnbtop100buys <- head(bnbtopbuyerssorted,100)
+```
+
+```{r}
+mcapmergeboth <- merge(mcapFiltered,mcapPrice,by="DATE")
+statusnetworkmergeboth <- merge(statusnetworkFiltered,statusnetworkPrice,by="DATE")
+bnbmergeboth <- merge(bnbFiltered,mcapPrice,by="DATE")
+```
+```{r}
+mcapmergeboth %>% group_by(mcapmergeboth$BuyerInfo)
+statusnetworkmergeboth %>% group_by(statusnetworkmergeboth$BuyerInfo)
+bnbmergeboth %>% group_by(bnbmergeboth$BuyerInfo)
+```
+
+```{r}
+mcapmergebybuyerid <- merge(mcaptop100buys,mcapmergeboth,by="BuyerInfo")
+statusnetworkmergebybuyerid <- merge(statusnetworktop100buys,statusnetworkmergeboth,by="BuyerInfo")
+bnbmergebybuyerid <- merge(bnbtop100buys,bnbmergeboth,by="BuyerInfo")
+```
+
+```{r}
+mcapaggamount <- aggregate(mcapmergebybuyerid$TokenPrice, by=list(mcapmergebybuyerid$DATE),sum)
+statusnetworkaggamount <- aggregate(statusnetworkmergebybuyerid$TokenPrice, by=list(statusnetworkmergebybuyerid$DATE),sum)
+bnbaggamount <- aggregate(bnbmergebybuyerid$TokenPrice, by=list(bnbmergebybuyerid$DATE),sum)
+```
+
+```{r}
+names(mcapaggamount) <- c("DATE","AGGREGATEAMOUNT")
+names(statusnetworkaggamount) <- c("DATE","AGGREGATEAMOUNT")
+names(bnbaggamount) <- c("DATE","AGGREGATEAMOUNT")
+```
+
+```{r}
+mcapfinalmerge <- merge(mcapPrice,mcapaggamount,by="DATE")
+statusnetworkfinalmerge <- merge(statusnetworkPrice,statusnetworkaggamount,by="DATE")
+bnbfinalmerge <- merge(bnbPrice,bnbaggamount,by="DATE")
+```
+
+```{r}
+cor(mcapfinalmerge$Close,mcapfinalmerge$AGGREGATEAMOUNT)
+cor(statusnetworkfinalmerge$Close,statusnetworkfinalmerge$AGGREGATEAMOUNT)
+cor(bnbfinalmerge$Close,bnbfinalmerge$AGGREGATEAMOUNT)
+```
+
+```{r}
+scatter.smooth(x=mcapfinalmerge$AGGREGATEAMOUNT, y=mcapfinalmerge$Close, main="TokenPrice ~ Close")
+scatter.smooth(x=statusnetworkfinalmerge$AGGREGATEAMOUNT, y=statusnetworkfinalmerge$Close, main="TokenPrice ~ Close")
+scatter.smooth(x=bnbfinalmerge$AGGREGATEAMOUNT, y=bnbfinalmerge$Close, main="TokenPrice ~ Close")
+```
+
+```{r}
+mcapr <- lm(mcapfinalmerge$Close~mcapfinalmerge$AGGREGATEAMOUNT)
+statusnetworkr <- lm(statusnetworkfinalmerge$Close~statusnetworkfinalmerge$AGGREGATEAMOUNT)
+bnbr <- lm(bnbfinalmerge$Close~bnbfinalmerge$AGGREGATEAMOUNT)
+```
+
+```{r}
+summary(mcapr)
+summary(statusnetworkr)
+summary(bnbr)
+
+```
+
+```{r}
+mcaplmmod <- lm(mcapfinalmerge$Close ~ mcapfinalmerge$AGGREGATEAMOUNT)
+statusnetworklmmod <- lm(statusnetworkfinalmerge$Close ~ statusnetworkfinalmerge$AGGREGATEAMOUNT)
+bnblmmod <- lm(bnbfinalmerge$Close ~ bnbfinalmerge$AGGREGATEAMOUNT)
+```
+
+```{r}
+print(mcaplmmod)
+print(statusnetworklmmod)
+print(bnblmmod)
+```
+
+
